@@ -240,6 +240,14 @@ def get_current_ip():
     except Exception:
         return "172.16.88.162"  # Ваш запасной IP из скриншота
 
+async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /check — анализ вещи: бери/не бери"""
+    # ваш код...
+
+async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /label — анализ этикетки"""
+    # ваш код...
+
 def main():
     current_ip = get_current_ip()
     app = Application.builder().token(TOKEN).build()
@@ -250,6 +258,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="subscribe"))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="check_subscription_"))
+    app.add_handler(CommandHandler("check", check_command))
     app.add_handler(CommandHandler("label", handle_label))
     
     logging.info("Бот запущен")
