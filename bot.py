@@ -5,7 +5,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.request import HTTPXRequest
 import database
 import payment
 import analyzer  # ваш модуль с AI-анализом
@@ -197,11 +196,6 @@ def get_current_ip():
 
 def main():
     current_ip = get_current_ip()
-    request = HTTPXRequest(
-        proxy_url=f"socks5://{current_ip}:10808",
-        connect_timeout=60.0,
-        read_timeout=60.0,
-    )
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
