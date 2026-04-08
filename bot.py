@@ -181,6 +181,72 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
+async def handle_check_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает фото для команды /check"""
+    user_id = update.effective_user.id
+    
+    # Проверяем, что пользователь действительно ждёт анализа
+    if not context.user_data.get("waiting_for_check_photo"):
+        # Не в режиме /check — игнорируем или перенаправляем
+        await update.message.reply_text(
+            "Отправьте /check, чтобы проанализировать вещь, или просто фото для разбора образа."
+        )
+        return
+    
+    # Получаем фото
+    photo_file = await update.message.photo[-1].get_file()
+    photo_bytes = await photo_file.download_as_bytearray()
+    
+    await update.message.reply_text("🔍 Анализирую вещь... Это займёт несколько секунд.")
+    
+    # Временная заглушка (потом заменим на AI)
+    analysis = get_item_analysis_stub()
+    
+    await update.message.reply_text(analysis)
+    
+    # Сбрасываем состояние
+    context.user_data["waiting_for_check_photo"] = False
+
+async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает фото для команды /label"""
+    user_id = update.effective_user.id
+    
+    # Проверяем, что пользователь действительно ждёт анализа
+    if not context.user_data.get("waiting_for_label_photo"):
+        await update.message.reply_text(
+            "Отправьте /label, чтобы проанализировать этикетку."
+        )
+        return
+    
+    # Получаем фото
+    photo_file = await update.message.photo[-1].get_file()
+    photo_bytes = await photo_file.download_as_bytearray()
+    
+    await update.message.reply_text("🏷️ Анализирую этикетку...")
+    
+    # Здесь будет вызов Tesseract (позже)
+    analysis = "🏷️ **Анализ этикетки**\n\nСостав: шерсть 80%, полиэстер 20%\n\n✅ Хорошее качество, можно брать!"
+    
+    await update.message.reply_text(analysis, parse_mode='Markdown')
+    
+    # Сбрасываем состояние
+    context.user_data["waiting_for_label_photo"] = False
+
+def get_item_analysis_stub():
+    """Временная заглушка для анализа вещи"""
+    return (
+        "🧥 **Анализ вещи**\n\n"
+        "✅ **БЕРИ, если:**\n"
+        "• Вещь из натуральных материалов\n"
+        "• Цвет нейтральный\n"
+        "• Фасон классический\n\n"
+        "❌ **НЕ БЕРИ, если:**\n"
+        "• Есть крупные логотипы\n"
+        "• Ткань синтетическая\n"
+        "• У вас уже есть похожая\n\n"
+        "💰 **Вердикт:** Инвестиционная покупка — ДА"
+    )
+
 async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -242,16 +308,75 @@ def get_current_ip():
 
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /check — анализ вещи: бери/не бери"""
-    # ваш код...
+    async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):"""Команда /check — анализ вещи: бери/не бери"""
+    user_id = update.effective_user.id
+    
+    # Проверяем подписку
+    has_subscription = database.has_active_subscription(user_id)
+    has_free_left = database.has_free_consultation(user_id)
+    
+    if not has_subscription and not has_free_left:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
+        ])
+        await update.message.reply_text(
+            "🔍 Функция «Бери / Не бери» доступна только по подписке.\n\n"
+            "Оформите подписку за 599₽ и получайте:\n"
+            "✅ Анализ любых вещей перед покупкой\n"
+            "✅ Советы по инвестиционным покупкам\n"
+            "✅ Экономию на импульсивных тратах",
+            reply_markup=keyboard
+        )
+        return
+    
+    # Просим пользователя отправить фото
+    await update.message.reply_text(
+        "📸 Отправьте фото вещи, которую хотите проанализировать.\n\n"
+        "Я скажу: ✅ БЕРИ или ❌ НЕ БЕРИ"
+    )
+    
+    # Сохраняем состояние, что пользователь в режиме /check
+    context.user_data["waiting_for_check_photo"] = True
 
 async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /label — анализ этикетки"""
-    # ваш код...
+    async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):"""Команда /label — анализ этикетки"""
+    user_id = update.effective_user.id
+    
+    # Проверяем подписку
+    has_subscription = database.has_active_subscription(user_id)
+    has_free_left = database.has_free_consultation(user_id)
+    
+    if not has_subscription and not has_free_left:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
+        ])
+        await update.message.reply_text(
+            "🏷️ Функция «Анализ этикетки» доступна только по подписке.\n\n"
+            "Оформите подписку за 599₽ и получайте:\n"
+            "✅ Анализ состава тканей\n"
+            "✅ Оценку качества материалов\n"
+            "✅ Вердикт: стоит ли покупать",
+            reply_markup=keyboard
+        )
+        return
+    
+    # Просим пользователя отправить фото этикетки
+    await update.message.reply_text(
+        "🏷️ Отправьте фото этикетки (бирки) одежды.\n\n"
+        "Я проанализирую состав и скажу, качественная ли вещь."
+    )
+    
+    # Сохраняем состояние, что пользователь в режиме /label
+    context.user_data["waiting_for_label_photo"] = True
 
 def main():
     current_ip = get_current_ip()
     app = Application.builder().token(TOKEN).build()
     
+    app.add_handler(MessageHandler(filters.PHOTO & filters.User(context.user_data.get("waiting_for_check_photo", False)), handle_check_photo))
+    app.add_handler(MessageHandler(filters.PHOTO & filters.User(context.user_data.get("waiting_for_label_photo", False)), handle_label_photo))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
