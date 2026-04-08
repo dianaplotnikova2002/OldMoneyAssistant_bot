@@ -3,3 +3,6 @@ requests
 pillow
 python-dotenv
 httpx[socks]
+pytesseract
+Pillow
+opencv-python

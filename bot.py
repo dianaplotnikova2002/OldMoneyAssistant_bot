@@ -17,6 +17,51 @@ logging.basicConfig(level=logging.INFO)
 
 database.init_db()
 
+from label_analyzer import analyze_label  # импорт новой функции
+
+async def handle_label(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик для команды /label — анализ этикетки"""
+    user_id = update.effective_user.id
+    
+    # Проверяем подписку
+    has_subscription = database.has_active_subscription(user_id)
+    has_free_left = database.has_free_consultation(user_id)
+    
+    if not has_subscription and not has_free_left:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
+        ])
+        await update.message.reply_text(
+            "🔍 Функция «Анализ этикетки» доступна только по подписке.\n\n"
+            "Оформите подписку за 599₽ и получайте:\n"
+            "✅ Анализ состава тканей\n"
+            "✅ Оценку качества материалов\n"
+            "✅ Вердикт: стоит ли покупать",
+            reply_markup=keyboard
+        )
+        return
+    
+    # Получаем фото
+    if not update.message.reply_to_message or not update.message.reply_to_message.photo:
+        await update.message.reply_text(
+            "📸 Как пользоваться:\n"
+            "1. Отправьте фото этикетки в чат\n"
+            "2. Нажмите на фото → 'Ответить'\n"
+            "3. Напишите /label\n\n"
+            "Или просто отправьте фото с подписью /label"
+        )
+        return
+    
+    # Берём фото из ответа
+    photo_file = await update.message.reply_to_message.photo[-1].get_file()
+    photo_bytes = await photo_file.download_as_bytearray()
+    
+    await update.message.reply_text("🏷️ Анализирую этикетку... Это займёт несколько секунд.")
+    
+    # Анализируем
+    analysis = await analyze_label(photo_bytes)
+    await update.message.reply_text(analysis, parse_mode='Markdown')
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     database.save_user(user.id, user.username, user.first_name, user.last_name)
@@ -50,6 +95,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start — главное меню\n"
         "/help — эта справка\n"
         "/status — статус вашей подписки"
+        "/label — анализ этикетки: состав, качество ткани, вердикт"
     )
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,6 +250,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="subscribe"))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="check_subscription_"))
+    app.add_handler(CommandHandler("label", handle_label))
     
     logging.info("Бот запущен")
     app.run_polling()
