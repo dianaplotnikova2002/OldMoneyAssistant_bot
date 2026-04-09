@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from yandex_analyzer import analyze_outfit, analyze_item_for_purchase, analyze_label
 import database
 import payment
 import analyzer  # ваш модуль с AI-анализом
