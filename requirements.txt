@@ -6,4 +6,4 @@ httpx[socks]
 pytesseract
 Pillow
 opencv-python
-yandex-cloud-ml-sdk
+yandex-ai-studio-sdk

@@ -11,7 +11,7 @@ FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 API_KEY = os.getenv("YANDEX_API_KEY")
 
 # Инициализация SDK
-sdk = YCloudML(folder_id=FOLDER_ID, auth=API_KEY)
+sdk = YandexAIStudio(folder_id=FOLDER_ID, auth=API_KEY)
 
 # Получаем модель — используем lite версию (быстрее и дешевле)
 model = sdk.models.completions("yandexgpt-lite")
@@ -48,8 +48,13 @@ async def analyze_outfit(photo_bytes):
     try:
         # Для мультимодальности (фото + текст) потребуется другой подход
         # Пока отправляем только текст, а фото описываем в промпте
-        result = await model.run(prompt)
-        return result[0].text
+        result = sdk.completions.create(
+        model="yandexgpy-lite",
+        messages=[{"role": "user", "text": prompt}],
+        temperature=0.4,
+        max_tokens=800
+        )
+        return result.choices[0].message.text
     except Exception as e:
         return f"❌ Ошибка при анализе: {str(e)}"
 
@@ -81,8 +86,13 @@ async def analyze_item_for_purchase(photo_bytes):
 """
     
     try:
-        result = await model.run(prompt)
-        return result[0].text
+        result = sdk.completions.create(
+        model="yandexgpy-lite",
+        messages=[{"role": "user", "text": prompt}],
+        temperature=0.4,
+        max_tokens=800
+        )
+        return result.choices[0].message.text
     except Exception as e:
         return f"❌ Ошибка при анализе: {str(e)}"
 
@@ -115,7 +125,12 @@ async def analyze_label(photo_bytes):
 """
     
     try:
-        result = await model.run(prompt)
-        return result[0].text
+        result = sdk.completions.create(
+        model="yandexgpy-lite",
+        messages=[{"role": "user", "text": prompt}],
+        temperature=0.4,
+        max_tokens=800
+        )
+        return result.choices[0].message.text
     except Exception as e:
         return f"❌ Ошибка при анализе этикетки: {str(e)}"

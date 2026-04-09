@@ -128,19 +128,30 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    photo_file = await update.message.photo[-1].get_file()
-    photo_bytes = await photo_file.download_as_bytearray()
+    
+if context.user_data.get("waiting_for_check_photo"):
+        # Пользователь хочет проверить вещь (бери/не бери)
+        await handle_check_photo(update, context)
+        return
+    
+if context.user_data.get("waiting_for_label_photo"):
+        # Пользователь хочет проверить этикетку
+        await handle_label_photo(update, context)
+        return
+
+photo_file = await update.message.photo[-1].get_file()
+photo_bytes = await photo_file.download_as_bytearray()
     
     # Сохраняем фото для последующего анализа
-    context.user_data["last_photo_bytes"] = photo_bytes
-    context.user_data["last_photo_id"] = update.message.photo[-1].file_id
+context.user_data["last_photo_bytes"] = photo_bytes
+context.user_data["last_photo_id"] = update.message.photo[-1].file_id
     
     # Проверяем подписку
-    has_subscription = database.has_active_subscription(user_id)
-    has_free_left = database.has_free_consultation(user_id)
+has_subscription = database.has_active_subscription(user_id)
+has_free_left = database.has_free_consultation(user_id)
     
     # Случай 1: есть активная подписка → сразу анализ
-    if has_subscription:
+if has_subscription:
         await update.message.reply_text("🔍 Анализирую ваш образ (подписка активна)...")
         analysis = await analyzer.analyze_photo(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=False)
@@ -148,7 +159,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Случай 2: нет подписки, но есть бесплатная консультация
-    if has_free_left:
+if has_free_left:
         await update.message.reply_text(
             "🎁 Это ваша БЕСПЛАТНАЯ консультация!\n"
             "🔍 Анализирую образ..."
@@ -173,10 +184,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Случай 3: нет подписки, бесплатная уже использована
-    keyboard = InlineKeyboardMarkup([
+keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
     ])
-    await update.message.reply_text(
+await update.message.reply_text(
         "❌ У вас нет активной подписки, а бесплатная консультация уже использована.\n\n"
         "Оформите подписку за 599₽ и продолжайте получать разборы образов.",
         reply_markup=keyboard
@@ -309,7 +320,6 @@ def get_current_ip():
 
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /check — анализ вещи: бери/не бери"""
-    async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):"""Команда /check — анализ вещи: бери/не бери"""
     user_id = update.effective_user.id
     
     # Проверяем подписку
@@ -330,21 +340,18 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Просим пользователя отправить фото
+    # Устанавливаем режим ожидания фото для check
+    context.user_data["waiting_for_check_photo"] = True
+    
     await update.message.reply_text(
         "📸 Отправьте фото вещи, которую хотите проанализировать.\n\n"
         "Я скажу: ✅ БЕРИ или ❌ НЕ БЕРИ"
     )
-    
-    # Сохраняем состояние, что пользователь в режиме /check
-    context.user_data["waiting_for_check_photo"] = True
 
 async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /label — анализ этикетки"""
-    async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):"""Команда /label — анализ этикетки"""
     user_id = update.effective_user.id
     
-    # Проверяем подписку
     has_subscription = database.has_active_subscription(user_id)
     has_free_left = database.has_free_consultation(user_id)
     
@@ -356,27 +363,24 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🏷️ Функция «Анализ этикетки» доступна только по подписке.\n\n"
             "Оформите подписку за 599₽ и получайте:\n"
             "✅ Анализ состава тканей\n"
-            "✅ Оценку качества материалов\n"
-            "✅ Вердикт: стоит ли покупать",
+            "✅ Оценку качества материалов",
             reply_markup=keyboard
         )
         return
     
-    # Просим пользователя отправить фото этикетки
+    context.user_data["waiting_for_label_photo"] = True
+    
     await update.message.reply_text(
         "🏷️ Отправьте фото этикетки (бирки) одежды.\n\n"
         "Я проанализирую состав и скажу, качественная ли вещь."
     )
-    
-    # Сохраняем состояние, что пользователь в режиме /label
-    context.user_data["waiting_for_label_photo"] = True
+
 
 def main():
     current_ip = get_current_ip()
     app = Application.builder().token(TOKEN).build()
     
-    app.add_handler(MessageHandler(filters.PHOTO & filters.User(context.user_data.get("waiting_for_check_photo", False)), handle_check_photo))
-    app.add_handler(MessageHandler(filters.PHOTO & filters.User(context.user_data.get("waiting_for_label_photo", False)), handle_label_photo))
+
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
