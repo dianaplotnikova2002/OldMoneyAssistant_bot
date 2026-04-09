@@ -125,73 +125,63 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "💳 Оформите подписку за 599₽/мес и получайте неограниченные консультации.\n"
                 "Отправьте новое фото, чтобы увидеть предложение."
             )
-
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Основной обработчик фото"""
     user_id = update.effective_user.id
     
-if context.user_data.get("waiting_for_check_photo"):
+    # Проверяем, в каком режиме пользователь
+    if context.user_data.get("waiting_for_check_photo"):
         # Пользователь хочет проверить вещь (бери/не бери)
         await handle_check_photo(update, context)
         return
     
-if context.user_data.get("waiting_for_label_photo"):
+    if context.user_data.get("waiting_for_label_photo"):
         # Пользователь хочет проверить этикетку
         await handle_label_photo(update, context)
         return
-
-photo_file = await update.message.photo[-1].get_file()
-photo_bytes = await photo_file.download_as_bytearray()
     
-    # Сохраняем фото для последующего анализа
-context.user_data["last_photo_bytes"] = photo_bytes
-context.user_data["last_photo_id"] = update.message.photo[-1].file_id
+    # Если нет активного режима — проверяем подписку для обычного анализа
+    has_subscription = database.has_active_subscription(user_id)
+    has_free_left = database.has_free_consultation(user_id)
     
-    # Проверяем подписку
-has_subscription = database.has_active_subscription(user_id)
-has_free_left = database.has_free_consultation(user_id)
-    
-    # Случай 1: есть активная подписка → сразу анализ
-if has_subscription:
-        await update.message.reply_text("🔍 Анализирую ваш образ (подписка активна)...")
-        analysis = await analyzer.analyze_photo(photo_bytes)
-        database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=False)
-        await update.message.reply_text(analysis)
+    if not has_subscription and not has_free_left:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
+        ])
+        await update.message.reply_text(
+            "❌ У вас нет активной подписки.\n\n"
+            "Оформите подписку за 599₽ и получайте неограниченные консультации.",
+            reply_markup=keyboard
+        )
         return
     
-    # Случай 2: нет подписки, но есть бесплатная консультация
-if has_free_left:
-        await update.message.reply_text(
-            "🎁 Это ваша БЕСПЛАТНАЯ консультация!\n"
-            "🔍 Анализирую образ..."
-        )
-        analysis = await analyzer.analyze_photo(photo_bytes)
+    # Получаем фото
+    photo_file = await update.message.photo[-1].get_file()
+    photo_bytes = await photo_file.download_as_bytearray()
+    
+    # Анализируем образ
+    await update.message.reply_text("🔍 Анализирую ваш образ...")
+    
+    if has_free_left and not has_subscription:
+        # Это бесплатная консультация
+        analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=True)
         await update.message.reply_text(analysis)
         
-        # После бесплатной консультации предлагаем подписку
+        # Предлагаем подписку
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
         ])
         await update.message.reply_text(
             "✨ Понравился разбор?\n\n"
-            "Оформите подписку за 599₽ и получайте неограниченные консультации в течение месяца.\n\n"
-            "С подпиской вы сможете:\n"
-            "✅ Разбирать любые образы\n"
-            "✅ Получать советы по улучшению\n"
-            "✅ Стать ближе к эстетике Old Money",
+            "Оформите подписку за 599₽ и получайте неограниченные консультации.",
             reply_markup=keyboard
         )
-        return
-    
-    # Случай 3: нет подписки, бесплатная уже использована
-keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
-    ])
-await update.message.reply_text(
-        "❌ У вас нет активной подписки, а бесплатная консультация уже использована.\n\n"
-        "Оформите подписку за 599₽ и продолжайте получать разборы образов.",
-        reply_markup=keyboard
-    )
+    else:
+        # Обычная платная консультация
+        analysis = await analyze_outfit(photo_bytes)
+        database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=False)
+        await update.message.reply_text(analysis)
 
 async def handle_check_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает фото для команды /check"""
