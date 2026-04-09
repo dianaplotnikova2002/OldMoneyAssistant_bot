@@ -2,7 +2,7 @@ python-telegram-bot==21.10
 requests
 pillow
 python-dotenv
-httpx[socks]
+httpx
 pytesseract
 Pillow
 opencv-python
