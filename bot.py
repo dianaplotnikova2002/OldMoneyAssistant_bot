@@ -65,8 +65,11 @@ async def handle_label(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     database.save_user(user.id, user.username, user.first_name, user.last_name)
-    
-    await update.message.reply_text(
+    keyboard = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🔘 ТЕСТ", callback_data="test")]
+])
+await update.message.reply_text("Нажмите кнопку:", reply_markup=keyboard)
+await update.message.reply_text(
         "🧥 Добро пожаловать в «Стиль вне времени» — вашего AI-стилиста в эстетике Old Money.\n\n"
         "🎁 Первая консультация — БЕСПЛАТНО.\n"
         "Вы отправляете фото - я даю полный разбор образа.\n\n"
@@ -363,11 +366,14 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🏷️ Отправьте фото этикетки (бирки) одежды.\n\n"
         "Я проанализирую состав и скажу, качественная ли вещь."
     )
-
+async def test_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("✅ Кнопка работает! Тест пройден.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
-    
+    app.add_handler(CallbackQueryHandler(test_callback, pattern="test"))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
