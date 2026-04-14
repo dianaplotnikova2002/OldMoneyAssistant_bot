@@ -147,7 +147,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not has_subscription and not has_free_left:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
+            [InlineKeyboardButton("📆 Тест кнопки", callback_data="test")]
         ])
         await update.message.reply_text(
             "❌ У вас нет активной подписки.\n\n"
