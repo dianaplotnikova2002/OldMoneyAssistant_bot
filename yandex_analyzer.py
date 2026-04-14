@@ -1,29 +1,74 @@
-
 import os
+import logging
 from dotenv import load_dotenv
-from yandex_cloud_ml_sdk import YCloudML
-import io
+import httpx
+import base64
 from PIL import Image
+import io
 
 load_dotenv()
 
 FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 API_KEY = os.getenv("YANDEX_API_KEY")
 
-# Инициализация SDK
-sdk = YandexAIStudio(folder_id=FOLDER_ID, auth=API_KEY)
+# API endpoint для YandexGPT
+YANDEX_GPT_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
-# Получаем модель — используем lite версию (быстрее и дешевле)
-model = sdk.models.completions("yandexgpt-lite")
-model = model.configure(temperature=0.4, max_tokens=800)
-
-async def analyze_outfit(photo_bytes):
-    """Анализирует образ на фото"""
+async def call_yandex_gpt(prompt: str) -> str:
+    """Отправляет запрос к YandexGPT и возвращает ответ."""
     
+    if not API_KEY or not FOLDER_ID:
+        return "❌ Ошибка: не настроены ключи YandexGPT. Пожалуйста, сообщите администратору."
+    
+    headers = {
+        "Authorization": f"Api-Key {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "modelUri": f"gpt://{FOLDER_ID}/yandexgpt-lite",
+        "completionOptions": {
+            "stream": False,
+            "temperature": 0.4,
+            "maxTokens": 1000
+        },
+        "messages": [
+            {
+                "role": "user",
+                "text": prompt
+            }
+        ]
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(YANDEX_GPT_URL, headers=headers, json=data)
+            result = response.json()
+            
+            if response.status_code == 200:
+                return result["result"]["alternatives"][0]["message"]["text"]
+            else:
+                error_msg = result.get("message", "Неизвестная ошибка")
+                logging.error(f"YandexGPT ошибка: {error_msg}")
+                return f"❌ Ошибка YandexGPT: {error_msg}"
+                
+    except httpx.TimeoutException:
+        return "❌ Превышено время ожидания ответа от YandexGPT. Попробуйте ещё раз."
+    except Exception as e:
+        logging.error(f"Ошибка при вызове YandexGPT: {e}")
+        return f"❌ Ошибка при анализе: {str(e)}"
+
+async def analyze_outfit(photo_bytes) -> str:
+    """Анализирует образ на фото и даёт стилистические рекомендации."""
+    
+    # Сейчас YandexGPT не видит фото напрямую, поэтому отправляем текстовый запрос
+    # В будущем можно добавить описание фото через другую нейросеть
     prompt = """
 Ты — профессиональный стилист в эстетике Old Money (тихая роскошь, вечная элегантность).
 
-Проанализируй образ на фото и ответь строго в таком формате:
+Пользователь отправил фото своего образа. Проанализируй его, основываясь на принципах Old Money.
+
+Ответь строго в таком формате:
 
 🧥 **Анализ образа**
 
@@ -43,28 +88,19 @@ async def analyze_outfit(photo_bytes):
 [один совет, как сэкономить деньги в контексте этого образа]
 
 Будь строгой, но доброжелательной. Основывайся на принципах Old Money: качественные материалы, классические силуэты, отсутствие кричащих логотипов, нейтральная цветовая гамма.
+
+Если не видишь фото подробно, дай общие советы по улучшению стиля в этой эстетике.
 """
     
-    try:
-        # Для мультимодальности (фото + текст) потребуется другой подход
-        # Пока отправляем только текст, а фото описываем в промпте
-        result = sdk.completions.create(
-        model="yandexgpy-lite",
-        messages=[{"role": "user", "text": prompt}],
-        temperature=0.4,
-        max_tokens=800
-        )
-        return result.choices[0].message.text
-    except Exception as e:
-        return f"❌ Ошибка при анализе: {str(e)}"
+    return await call_yandex_gpt(prompt)
 
-async def analyze_item_for_purchase(photo_bytes):
-    """Анализирует вещь для покупки: бери/не бери"""
+async def analyze_item_for_purchase(photo_bytes) -> str:
+    """Анализирует вещь для покупки: стоит брать или нет."""
     
     prompt = """
 Ты — эксперт по качественным вещам и инвестиционному гардеробу.
 
-Проанализируй вещь на фото и реши: стоит ли её покупать человеку, который хочет выглядеть в эстетике Old Money.
+Пользователь хочет купить вещь (отправил фото). Проанализируй и реши: стоит ли её покупать человеку, который хочет выглядеть в эстетике Old Money.
 
 Ответь строго в таком формате:
 
@@ -85,32 +121,23 @@ async def analyze_item_for_purchase(photo_bytes):
 Критерии оценки: качество материалов, классический крой, нейтральные цвета, долговечность, отсутствие логотипов.
 """
     
-    try:
-        result = sdk.completions.create(
-        model="yandexgpy-lite",
-        messages=[{"role": "user", "text": prompt}],
-        temperature=0.4,
-        max_tokens=800
-        )
-        return result.choices[0].message.text
-    except Exception as e:
-        return f"❌ Ошибка при анализе: {str(e)}"
+    return await call_yandex_gpt(prompt)
 
-async def analyze_label(photo_bytes):
-    """Анализирует этикетку"""
+async def analyze_label(photo_bytes) -> str:
+    """Анализирует этикетку: оценивает состав и качество ткани."""
     
     prompt = """
 Ты — эксперт по тканям и качеству одежды.
 
-На фото — этикетка одежды. Распознай, что написано на этикетке, и проанализируй состав.
+Пользователь отправил фото этикетки одежды. Проанализируй состав и качество ткани.
 
 Ответь строго в таком формате:
 
 🏷️ **Анализ этикетки**
 
 📋 **Состав:**
-• [материал 1] — [процент]%
-• [материал 2] — [процент]%
+• [материал 1]
+• [материал 2]
 
 ✅ **Плюсы:**
 • [плюс 1]
@@ -121,16 +148,10 @@ async def analyze_label(photo_bytes):
 
 💰 **Вердикт:** [ИНВЕСТИЦИЯ / СРЕДНЕЕ / НЕ БЕРИ]
 
-Если распознать состав не удалось, напиши об этом и дай общие советы по выбору качественных тканей.
+[Объяснение: вещь качественная/некачественная, будет ли служить долго]
+
+Если точный состав не видно, дай общие советы по выбору качественных тканей для эстетики Old Money (натуральные материалы: шерсть, хлопок, лён, шёлк, кашемир; избегать дешёвого полиэстера и кричащих принтов).
 """
     
-    try:
-        result = sdk.completions.create(
-        model="yandexgpy-lite",
-        messages=[{"role": "user", "text": prompt}],
-        temperature=0.4,
-        max_tokens=800
-        )
-        return result.choices[0].message.text
-    except Exception as e:
-        return f"❌ Ошибка при анализе этикетки: {str(e)}"
+    return await call_yandex_gpt(prompt)
+    

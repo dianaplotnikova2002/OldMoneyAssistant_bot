@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO)
 
 database.init_db()
 
-from label_analyzer import analyze_label  # импорт новой функции
 
 async def handle_label(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик для команды /label — анализ этикетки"""
@@ -95,7 +94,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Команды:\n"
         "/start — главное меню\n"
         "/help — эта справка\n"
-        "/status — статус вашей подписки"
+        "/status — статус вашей подписки\n"
         "/label — анализ этикетки: состав, качество ткани, вердикт"
     )
 
@@ -367,22 +366,18 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    current_ip = get_current_ip()
     app = Application.builder().token(TOKEN).build()
     
-
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(CommandHandler("check", check_command))
+    app.add_handler(CommandHandler("label", label_command))  # используем label_command
+    
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # только один раз!
+    
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="subscribe"))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="check_subscription_"))
-    app.add_handler(CommandHandler("check", check_command))
-    app.add_handler(CommandHandler("label", handle_label))
     
     logging.info("Бот запущен")
     app.run_polling()
-
-if __name__ == "__main__":
-        main()
