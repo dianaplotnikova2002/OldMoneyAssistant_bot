@@ -373,9 +373,7 @@ def main():
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("check", check_command))
     app.add_handler(CommandHandler("label", label_command))  # используем label_command
-    
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # только один раз!
-    
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="subscribe"))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="check_subscription_"))
     
