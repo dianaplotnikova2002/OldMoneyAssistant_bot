@@ -7,3 +7,4 @@ pytesseract
 Pillow
 opencv-python
 yandex-ai-studio-sdk
+yookassa
