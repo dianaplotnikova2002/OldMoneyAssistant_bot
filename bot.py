@@ -68,7 +68,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
     [InlineKeyboardButton("🔘 ТЕСТ", callback_data="test")]
 ])
-await update.message.reply_text("Нажмите кнопку:", reply_markup=keyboard)
 await update.message.reply_text(
         "🧥 Добро пожаловать в «Стиль вне времени» — вашего AI-стилиста в эстетике Old Money.\n\n"
         "🎁 Первая консультация — БЕСПЛАТНО.\n"
