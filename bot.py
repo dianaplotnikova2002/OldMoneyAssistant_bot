@@ -200,8 +200,10 @@ async def handle_check_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text("🔍 Анализирую вещь... Это займёт несколько секунд.")
     
-    # Временная заглушка (потом заменим на AI)
-    analysis = get_item_analysis_stub()
+    
+    # Реальный AI-анализ через YandexGPT
+    analysis = await analyze_item_for_purchase(photo_bytes)
+    
     
     await update.message.reply_text(analysis)
     
@@ -226,27 +228,14 @@ async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("🏷️ Анализирую этикетку...")
     
     # Здесь будет вызов Tesseract (позже)
-    analysis = "🏷️ **Анализ этикетки**\n\nСостав: шерсть 80%, полиэстер 20%\n\n✅ Хорошее качество, можно брать!"
+    # Реальный анализ этикетки через YandexGPT (или Tesseract)
+    analysis = await analyze_label(photo_bytes)
     
     await update.message.reply_text(analysis, parse_mode='Markdown')
     
     # Сбрасываем состояние
     context.user_data["waiting_for_label_photo"] = False
 
-def get_item_analysis_stub():
-    """Временная заглушка для анализа вещи"""
-    return (
-        "🧥 **Анализ вещи**\n\n"
-        "✅ **БЕРИ, если:**\n"
-        "• Вещь из натуральных материалов\n"
-        "• Цвет нейтральный\n"
-        "• Фасон классический\n\n"
-        "❌ **НЕ БЕРИ, если:**\n"
-        "• Есть крупные логотипы\n"
-        "• Ткань синтетическая\n"
-        "• У вас уже есть похожая\n\n"
-        "💰 **Вердикт:** Инвестиционная покупка — ДА"
-    )
 
 async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
