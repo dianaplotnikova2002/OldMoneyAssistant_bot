@@ -353,7 +353,7 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Я проанализирую состав и скажу, качественная ли вещь."
     )
 
-
+ 
 def main():
     app = Application.builder().token(TOKEN).build()
     
