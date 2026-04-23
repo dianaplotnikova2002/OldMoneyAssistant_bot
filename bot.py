@@ -176,16 +176,19 @@ async def test_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # В функции main() добавьте ЭТУ строку ПЕРЕД другими обработчиками
 def main():
+   async def main():
     app = Application.builder().token(TOKEN).build()
     
-    # Временный тестовый обработчик - поймает любой callback
-    app.add_handler(CallbackQueryHandler(test_callback))  # <- без pattern, ловит всё
+    # Принудительно удаляем вебхук при старте
+    await app.bot.delete_webhook(drop_pending_updates=True)
     
-    # Остальные ваши обработчики
-    app.add_handler(CommandHandler("start", start))
-    # ... все остальные
+    # ... добавляем обработчики
     
     app.run_polling()
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
 
 async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
