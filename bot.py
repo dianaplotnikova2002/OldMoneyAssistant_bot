@@ -167,78 +167,36 @@ async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text(analysis, parse_mode='Markdown')
     context.user_data["waiting_for_label_photo"] = False
-# Добавьте ЭТУ функцию для теста
-
-async def test_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    print(f"🔵 ЛЮБОЙ callback получен! data={query.data}")
-    await query.answer(text="Тест работает!", show_alert=True)
-
-# В функции main() добавьте ЭТУ строку ПЕРЕД другими обработчиками
-def main():
-   async def main():
-    app = Application.builder().token(TOKEN).build()
-    
-    # Принудительно удаляем вебхук при старте
-    await app.bot.delete_webhook(drop_pending_updates=True)
-    
-    # ... добавляем обработчики
-    
-    app.run_polling()
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
 
 async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    
-    # Проверка на InvalidCallbackData
-    if isinstance(query.data, InvalidCallbackData):
-        await query.answer(text="Кнопка устарела. Пожалуйста, запросите новую подписку заново.", show_alert=True)
-        return
-    
     await query.answer()
     
     user_id = query.from_user.id
     
     try:
-        # Логируем для отладки
-        logging.info(f"Создаём платёж для user_id={user_id}")
-        
-        # Создаём платёж на 599₽
         payment_url, payment_id = payment.create_payment(
             amount=599.00,
             description="Подписка «Стиль вне времени» — 1 месяц",
             telegram_id=user_id
         )
         
-        logging.info(f"Платёж создан: {payment_id}")
-        
-        # Сохраняем платёж в БД
         database.save_payment(user_id, payment_id, 599.00, "pending")
         context.user_data["pending_payment_id"] = payment_id
         
-        # Создаём кнопки
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 Оплатить 599₽", url=payment_url)],
             [InlineKeyboardButton("✅ Я оплатил(-а)", callback_data=f"check_subscription_{payment_id}")]
         ])
         
-        # Редактируем сообщение с кнопками
         await query.edit_message_text(
             "💳 Для оформления подписки нажмите на кнопку оплаты.\n\n"
             "После успешной оплаты нажмите «Я оплатил(-а)» — подписка активируется на 30 дней.",
             reply_markup=keyboard
         )
-        
     except Exception as e:
-        logging.error(f"Ошибка при создании платежа: {e}", exc_info=True)
-        await query.edit_message_text(
-            f"❌ Произошла ошибка при создании платежа.\n\n"
-            f"Пожалуйста, попробуйте позже или обратитесь к администратору.\n\n"
-            f"Ошибка: {str(e)}"
-        )
+        logging.error(f"Ошибка при создании платежа: {e}")
+        await query.edit_message_text(f"❌ Ошибка: {str(e)}")
 
 async def check_subscription_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -318,6 +276,7 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = Application.builder().token(TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
@@ -331,4 +290,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main()  # ← Просто main(), без asyncio.run()
