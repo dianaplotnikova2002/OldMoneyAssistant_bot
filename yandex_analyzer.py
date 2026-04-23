@@ -3,28 +3,31 @@ import logging
 from dotenv import load_dotenv
 import httpx
 import base64
+from pathlib import Path
 
-load_dotenv()
+# Загружаем .env принудительно
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path, override=True)
 
 FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 API_KEY = os.getenv("YANDEX_API_KEY")
 
-# API endpoint для YandexGPT
-YANDEX_GPT_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+# Диагностика (удалите после проверки)
+print(f"[yandex_analyzer] FOLDER_ID: {FOLDER_ID}")
+print(f"[yandex_analyzer] API_KEY: {API_KEY[:20] if API_KEY else 'None'}...")
+
+if not API_KEY or not FOLDER_ID:
+    logging.error("❌ Ключи YandexGPT не загружены!")
+    raise ValueError("YANDEX_API_KEY и YANDEX_FOLDER_ID должны быть в .env")
 
 async def call_yandex_gpt(prompt: str, image_bytes: bytes = None) -> str:
     """Отправляет запрос к YandexGPT и возвращает ответ."""
-    
-    if not API_KEY or not FOLDER_ID:
-        logging.error("YANDEX_API_KEY или YANDEX_FOLDER_ID не найдены")
-        return "❌ Ошибка: не настроены ключи YandexGPT. Пожалуйста, сообщите администратору."
     
     headers = {
         "Authorization": f"Api-Key {API_KEY}",
         "Content-Type": "application/json"
     }
     
-    # Формируем тело запроса
     data = {
         "modelUri": f"gpt://{FOLDER_ID}/yandexgpt-lite",
         "completionOptions": {
@@ -40,157 +43,73 @@ async def call_yandex_gpt(prompt: str, image_bytes: bytes = None) -> str:
         ]
     }
     
-    # Логируем для отладки (без敏感ных данных)
-    logging.info(f"Отправка запроса к YandexGPT. Folder ID: {FOLDER_ID[:10]}...")
+    # Если есть фото, пытаемся добавить (но yandexgpt-lite не поддерживает изображения)
+    if image_bytes:
+        logging.warning("YandexGPT Lite не поддерживает изображения. Отправляю только текстовый запрос.")
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(YANDEX_GPT_URL, headers=headers, json=data)
-            
-            # Логируем статус ответа
-            logging.info(f"YandexGPT ответ: статус {response.status_code}")
-            
-            # Пытаемся получить тело ответа
-            try:
-                result = response.json()
-                logging.info(f"Тело ответа: {str(result)[:500]}")  # Логируем первые 500 символов
-            except:
-                logging.error(f"Не удалось распарсить JSON: {response.text[:500]}")
-                result = None
+            response = await client.post(
+                "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+                headers=headers,
+                json=data
+            )
             
             if response.status_code == 200:
-                if result and "result" in result and "alternatives" in result["result"]:
-                    return result["result"]["alternatives"][0]["message"]["text"]
-                else:
-                    logging.error(f"Неожиданный формат ответа: {result}")
-                    return "❌ Ошибка: неожиданный формат ответа от YandexGPT"
+                result = response.json()
+                return result["result"]["alternatives"][0]["message"]["text"]
             else:
-                # Разбираем конкретную ошибку
-                error_msg = "Неизвестная ошибка"
-                if result:
-                    if "message" in result:
-                        error_msg = result["message"]
-                    elif "error" in result:
-                        error_msg = result["error"].get("message", str(result["error"]))
-                    elif "description" in result:
-                        error_msg = result["description"]
-                
-                logging.error(f"YandexGPT ошибка {response.status_code}: {error_msg}")
-                
-                # Даём понятное объяснение пользователю
-                if response.status_code == 400:
-                    if "folder" in error_msg.lower():
-                        return "❌ Ошибка: неверный идентификатор каталога (Folder ID). Проверьте настройки бота."
-                    elif "api" in error_msg.lower() or "key" in error_msg.lower():
-                        return "❌ Ошибка: неверный API-ключ. Проверьте настройки бота."
-                    else:
-                        return f"❌ Ошибка запроса: {error_msg}"
-                elif response.status_code == 401:
-                    return "❌ Ошибка авторизации: недействительный API-ключ."
-                elif response.status_code == 403:
-                    return "❌ Ошибка доступа: у сервисного аккаунта нет прав на использование YandexGPT. Нужна роль 'ai.languageModels.user'."
-                elif response.status_code == 429:
-                    return "❌ Превышен лимит запросов. Попробуйте позже."
-                else:
-                    return f"❌ Ошибка YandexGPT (код {response.status_code}): {error_msg}"
+                error_text = await response.text()
+                logging.error(f"YandexGPT ошибка {response.status_code}: {error_text}")
+                return f"❌ Ошибка YandexGPT: {error_text[:200]}"
                 
     except httpx.TimeoutException:
-        logging.error("Таймаут при вызове YandexGPT")
-        return "❌ Превышено время ожидания ответа от YandexGPT. Попробуйте ещё раз."
+        return "❌ Превышено время ожидания ответа от YandexGPT."
     except Exception as e:
-        logging.error(f"Исключение при вызове YandexGPT: {e}", exc_info=True)
+        logging.error(f"Ошибка при вызове YandexGPT: {e}")
         return f"❌ Ошибка при анализе: {str(e)}"
 
 async def analyze_outfit(photo_bytes: bytes) -> str:
-    """Анализирует образ на фото и даёт стилистические рекомендации."""
-    
     prompt = """
-Ты — профессиональный стилист в эстетике Old Money (тихая роскошь, вечная элегантность).
+Ты — профессиональный стилист в эстетике Old Money.
 
-Проанализируй образ человека на этом фото, основываясь на принципах Old Money.
-
-Ответь строго в таком формате:
+Ответь строго в формате:
 
 🧥 **Анализ образа**
 
 ✅ **Что хорошо:**
-• [пункт 1]
-• [пункт 2]
+• пункт 1
+• пункт 2
 
 ❌ **Что можно улучшить:**
-• [пункт 1]
-• [пункт 2]
+• пункт 1
+• пункт 2
 
 💡 **Советы:**
-• [конкретная рекомендация 1]
-• [конкретная рекомендация 2]
-
-💰 **Совет по экономии:**
-[один совет, как сэкономить деньги в контексте этого образа]
-
-Будь строгой, но доброжелательной. Основывайся на принципах Old Money: качественные материалы, классические силуэты, отсутствие кричащих логотипов, нейтральная цветовая гамма.
+• совет 1
+• совет 2
 """
-    
     return await call_yandex_gpt(prompt, photo_bytes)
 
 async def analyze_item_for_purchase(photo_bytes: bytes) -> str:
-    """Анализирует вещь для покупки: стоит брать или нет."""
-    
     prompt = """
-Ты — эксперт по качественным вещам и инвестиционному гардеробу.
+Ты — эксперт по инвестиционным покупкам.
 
-Проанализируй вещь на этом фото и реши: стоит ли её покупать человеку, который хочет выглядеть в эстетике Old Money.
+Ответь строго в формате:
 
-Ответь строго в таком формате:
+💰 **Вердикт:** [БЕРИ / НЕ БЕРИ]
 
-🧥 **Анализ вещи**
-
-✅ **БЕРИ, если:**
-• [условие 1]
-• [условие 2]
-
-❌ **НЕ БЕРИ, если:**
-• [условие 1]
-• [условие 2]
-
-💰 **Вердикт:** [ИНВЕСТИЦИЯ / СРЕДНЕЕ / НЕ БЕРИ]
-
-[Краткое объяснение вердикта в 1 предложении]
-
-Критерии оценки: качество материалов, классический крой, нейтральные цвета, долговечность, отсутствие логотипов.
+**Почему:**
+• причина 1
+• причина 2
 """
-    
     return await call_yandex_gpt(prompt, photo_bytes)
 
 async def analyze_label(photo_bytes: bytes) -> str:
-    """Анализирует этикетку: оценивает состав и качество ткани."""
-    
     prompt = """
-Ты — эксперт по тканям и качеству одежды.
+Ты — эксперт по тканям.
 
-Проанализируй этикетку на этом фото (состав ткани, производитель, инструкции по уходу).
-
-Ответь строго в таком формате:
-
-🏷️ **Анализ этикетки**
-
-📋 **Состав:**
-• [материал 1]
-• [материал 2]
-
-✅ **Плюсы:**
-• [плюс 1]
-• [плюс 2]
-
-❌ **Минусы:**
-• [минус 1]
-
-💰 **Вердикт:** [ИНВЕСТИЦИЯ / СРЕДНЕЕ / НЕ БЕРИ]
-
-[Объяснение: вещь качественная/некачественная, будет ли служить долго]
-
-Если точный состав не видно на фото, дай общие советы по выбору качественных тканей для эстетики Old Money.
+Проанализируй состав и скажи, качественная ли вещь.
 """
-    
     return await call_yandex_gpt(prompt, photo_bytes)
     

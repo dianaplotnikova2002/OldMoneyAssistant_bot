@@ -6,11 +6,13 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from yandex_analyzer import analyze_outfit, analyze_item_for_purchase, analyze_label
+from pathlib import Path
 import database
 import payment
 import analyzer
 
-load_dotenv()
+env_path = Path(__file__).parent/ '.env'
+load_dotenv(dotenv_path=env_path)
 TOKEN = os.getenv("BOT_TOKEN")
 
 logging.basicConfig(level=logging.INFO)
