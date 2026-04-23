@@ -1,3 +1,5 @@
+import builtins
+str = builtins.str
 import uuid
 import logging
 import os

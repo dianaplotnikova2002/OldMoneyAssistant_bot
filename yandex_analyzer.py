@@ -1,3 +1,5 @@
+import builtins
+str = builtins.str
 import os
 import logging
 import asyncio

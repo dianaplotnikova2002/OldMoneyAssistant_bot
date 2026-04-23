@@ -1,3 +1,5 @@
+import builtins
+str = builtins.str
 import sqlite3
 from datetime import datetime, timedelta
 

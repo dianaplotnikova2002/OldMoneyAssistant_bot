@@ -1,3 +1,5 @@
+import builtins
+str = builtins.str
 import socket
 import os
 import logging
