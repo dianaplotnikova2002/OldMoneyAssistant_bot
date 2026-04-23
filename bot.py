@@ -167,6 +167,25 @@ async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text(analysis, parse_mode='Markdown')
     context.user_data["waiting_for_label_photo"] = False
+# Добавьте ЭТУ функцию для теста
+
+async def test_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    print(f"🔵 ЛЮБОЙ callback получен! data={query.data}")
+    await query.answer(text="Тест работает!", show_alert=True)
+
+# В функции main() добавьте ЭТУ строку ПЕРЕД другими обработчиками
+def main():
+    app = Application.builder().token(TOKEN).build()
+    
+    # Временный тестовый обработчик - поймает любой callback
+    app.add_handler(CallbackQueryHandler(test_callback))  # <- без pattern, ловит всё
+    
+    # Остальные ваши обработчики
+    app.add_handler(CommandHandler("start", start))
+    # ... все остальные
+    
+    app.run_polling()
 
 async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
