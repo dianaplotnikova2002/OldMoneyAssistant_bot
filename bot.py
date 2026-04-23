@@ -10,13 +10,13 @@ import database
 import payment
 import analyzer
 
-
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 
 logging.basicConfig(level=logging.INFO)
 
 database.init_db()
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -67,7 +67,6 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Отправляйте фото в любое время — я всегда готов помочь!"
         )
     else:
-        # Проверяем, была ли бесплатная консультация
         has_free = not database.has_free_consultation(user_id)
         if not has_free:
             await update.message.reply_text(
@@ -80,11 +79,12 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "💳 Оформите подписку за 599₽/мес и получайте неограниченные консультации.\n"
                 "Отправьте новое фото, чтобы увидеть предложение."
             )
-    async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-     """Основной обработчик фото"""
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Основной обработчик фото"""
     user_id = update.effective_user.id
     
-    # ПРОВЕРЯЕМ РЕЖИМЫ В ПЕРВУЮ ОЧЕРЕДЬ
+    # Проверяем режимы
     if context.user_data.get("waiting_for_check_photo"):
         await handle_check_photo(update, context)
         return
@@ -93,7 +93,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_label_photo(update, context)
         return
     
-    # ТОЛЬКО ПОСЛЕ ЭТОГО проверяем подписку для обычного анализа
+    # Проверка подписки
     has_subscription = database.has_active_subscription(user_id)
     has_free_left = database.has_free_consultation(user_id)
     
@@ -112,16 +112,13 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file = await update.message.photo[-1].get_file()
     photo_bytes = await photo_file.download_as_bytearray()
     
-    # Анализируем образ
     await update.message.reply_text("🔍 Анализирую ваш образ...")
     
     if has_free_left and not has_subscription:
-        # Бесплатная консультация
         analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=True)
         await update.message.reply_text(analysis)
         
-        # Предлагаем подписку
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
         ])
@@ -131,65 +128,45 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
     else:
-        # Платная консультация
         analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=False)
         await update.message.reply_text(analysis)
 
 async def handle_check_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает фото для команды /check"""
-    user_id = update.effective_user.id
-    
-    # Проверяем, что пользователь действительно ждёт анализа
     if not context.user_data.get("waiting_for_check_photo"):
-        # Не в режиме /check — игнорируем или перенаправляем
         await update.message.reply_text(
             "Отправьте /check, чтобы проанализировать вещь, или просто фото для разбора образа."
         )
         return
     
-    # Получаем фото
     photo_file = await update.message.photo[-1].get_file()
     photo_bytes = await photo_file.download_as_bytearray()
     
     await update.message.reply_text("🔍 Анализирую вещь... Это займёт несколько секунд.")
     
-    
-    # Реальный AI-анализ через YandexGPT
     analysis = await analyze_item_for_purchase(photo_bytes)
     
-    
     await update.message.reply_text(analysis)
-    
-    # Сбрасываем состояние
     context.user_data["waiting_for_check_photo"] = False
 
 async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает фото для команды /label"""
-    user_id = update.effective_user.id
-    
-    # Проверяем, что пользователь действительно ждёт анализа
     if not context.user_data.get("waiting_for_label_photo"):
         await update.message.reply_text(
             "Отправьте /label, чтобы проанализировать этикетку."
         )
         return
     
-    # Получаем фото
     photo_file = await update.message.photo[-1].get_file()
     photo_bytes = await photo_file.download_as_bytearray()
     
     await update.message.reply_text("🏷️ Анализирую этикетку...")
     
-    # Здесь будет вызов Tesseract (позже)
-    # Реальный анализ этикетки через YandexGPT (или Tesseract)
     analysis = await analyze_label(photo_bytes)
     
     await update.message.reply_text(analysis, parse_mode='Markdown')
-    
-    # Сбрасываем состояние
     context.user_data["waiting_for_label_photo"] = False
-
 
 async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -197,14 +174,12 @@ async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     user_id = query.from_user.id
     
-    # Создаём платёж на 599₽
     payment_url, payment_id = payment.create_payment(
         amount=599.00,
         description="Подписка «Стиль вне времени» — 1 месяц",
         telegram_id=user_id
     )
     
-    # Сохраняем платёж в БД (свяжем с подпиской после подтверждения)
     database.save_payment(user_id, payment_id, 599.00, "pending")
     context.user_data["pending_payment_id"] = payment_id
     
@@ -241,20 +216,11 @@ async def check_subscription_callback(update: Update, context: ContextTypes.DEFA
             "❌ Платёж не найден. Пожалуйста, завершите оплату и нажмите кнопку снова.\n\n"
             "Если вы оплатили, но ошибка сохраняется — подождите 1-2 минуты (платёж может обрабатываться)."
         )
-def get_current_ip():
-    try:
-        # Создаём подключение к DNS-серверу Google, чтобы узнать наш внешний IP
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-    except Exception:
-        return "172.16.88.162"  # Ваш запасной IP из скриншота
 
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /check — анализ вещи: бери/не бери"""
     user_id = update.effective_user.id
     
-    # Проверяем подписку
     has_subscription = database.has_active_subscription(user_id)
     has_free_left = database.has_free_consultation(user_id)
     
@@ -272,9 +238,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Устанавливаем режим ожидания фото для check
     context.user_data["waiting_for_check_photo"] = True
-    
     await update.message.reply_text(
         "📸 Отправьте фото вещи, которую хотите проанализировать.\n\n"
         "Я скажу: ✅ БЕРИ или ❌ НЕ БЕРИ"
@@ -301,13 +265,11 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     context.user_data["waiting_for_label_photo"] = True
-    
     await update.message.reply_text(
         "🏷️ Отправьте фото этикетки (бирки) одежды.\n\n"
         "Я проанализирую состав и скажу, качественная ли вещь."
     )
 
- 
 def main():
     app = Application.builder().token(TOKEN).build()
     
@@ -315,12 +277,13 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("check", check_command))
-    app.add_handler(CommandHandler("label", label_command))  # используем label_command
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))  # только один раз!
+    app.add_handler(CommandHandler("label", label_command))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="subscribe"))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="check_subscription_"))
     
     logging.info("Бот запущен")
     app.run_polling()
+
 if __name__ == "__main__":
-    main
+    main()
