@@ -80,27 +80,24 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "💳 Оформите подписку за 599₽/мес и получайте неограниченные консультации.\n"
                 "Отправьте новое фото, чтобы увидеть предложение."
             )
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-     logging.info(f"Получено фото, user_data: {context.user_data}")
-"""Основной обработчик фото"""
-user_id = update.effective_user.id
+    async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+     """Основной обработчик фото"""
+    user_id = update.effective_user.id
     
-    # Проверяем, в каком режиме пользователь
-if context.user_data.get("waiting_for_check_photo"):
-        # Пользователь хочет проверить вещь (бери/не бери)
+    # ПРОВЕРЯЕМ РЕЖИМЫ В ПЕРВУЮ ОЧЕРЕДЬ
+    if context.user_data.get("waiting_for_check_photo"):
         await handle_check_photo(update, context)
         return
     
-if context.user_data.get("waiting_for_label_photo"):
-        # Пользователь хочет проверить этикетку
+    if context.user_data.get("waiting_for_label_photo"):
         await handle_label_photo(update, context)
         return
     
-    # Если нет активного режима — проверяем подписку для обычного анализа
-has_subscription = database.has_active_subscription(user_id)
-has_free_left = database.has_free_consultation(user_id)
+    # ТОЛЬКО ПОСЛЕ ЭТОГО проверяем подписку для обычного анализа
+    has_subscription = database.has_active_subscription(user_id)
+    has_free_left = database.has_free_consultation(user_id)
     
-if not has_subscription and not has_free_left:
+    if not has_subscription and not has_free_left:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
         ])
@@ -112,14 +109,14 @@ if not has_subscription and not has_free_left:
         return
     
     # Получаем фото
-photo_file = await update.message.photo[-1].get_file()
-photo_bytes = await photo_file.download_as_bytearray()
+    photo_file = await update.message.photo[-1].get_file()
+    photo_bytes = await photo_file.download_as_bytearray()
     
     # Анализируем образ
-await update.message.reply_text("🔍 Анализирую ваш образ...")
+    await update.message.reply_text("🔍 Анализирую ваш образ...")
     
-if has_free_left and not has_subscription:
-        # Это бесплатная консультация
+    if has_free_left and not has_subscription:
+        # Бесплатная консультация
         analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=True)
         await update.message.reply_text(analysis)
@@ -133,8 +130,8 @@ if has_free_left and not has_subscription:
             "Оформите подписку за 599₽ и получайте неограниченные консультации.",
             reply_markup=keyboard
         )
-else:
-        # Обычная платная консультация
+    else:
+        # Платная консультация
         analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=False)
         await update.message.reply_text(analysis)
