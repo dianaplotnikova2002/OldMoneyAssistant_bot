@@ -275,6 +275,18 @@ async def label_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🏷️ Отправьте фото этикетки (бирки) одежды.\n\n"
         "Я проанализирую состав и скажу, качественная ли вещь."
     )
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /stats — статистика использования YandexGPT"""
+    from yandex_analyzer import get_usage_stats
+    stats = get_usage_stats()
+    await update.message.reply_text(
+        f"📊 **Статистика YandexGPT**\n\n"
+        f"📤 Запросов: {stats['total_requests']}\n"
+        f"💾 Из кэша: {stats['cached_responses']} ({stats['cache_hit_rate']})\n"
+        f"🔤 Токенов: {stats['total_tokens']}\n"
+        f"❌ Ошибок: {stats['errors']}",
+        parse_mode='Markdown'
+    )
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -284,6 +296,7 @@ def main():
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("check", check_command))
     app.add_handler(CommandHandler("label", label_command))
+    app.add_handler(CommandHandler("stats", stats_command))  # ← ДОБАВЬТЕ ЭТУ СТРОКУ
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="subscribe"))
     app.add_handler(CallbackQueryHandler(check_subscription_callback, pattern="check_subscription_"))
