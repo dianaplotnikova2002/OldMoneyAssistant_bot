@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 from yookassa import Configuration, Payment
-
+from telegram.ext import InvalidCallbackData
 load_dotenv()
 
 # Настройка ЮKassa
@@ -17,6 +17,7 @@ if SHOP_ID and SECRET_KEY:
     logging.info("ЮKassa настроена успешно")
 else:
     logging.warning("ЮKassa ключи не настроены. Платежи не будут работать.")
+
 
 def create_payment(amount: float, description: str, telegram_id: int, return_url: str = None) -> tuple:
     """
