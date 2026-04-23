@@ -13,7 +13,7 @@ API_KEY = os.getenv("YANDEX_API_KEY")
 YANDEX_GPT_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
 async def call_yandex_gpt(prompt: str, image_bytes: bytes = None) -> str:
-    """Отправляет запрос к YandexGPT с возможностью прикрепить фото и возвращает ответ."""
+    """Отправляет запрос к YandexGPT и возвращает ответ."""
     
     if not API_KEY or not FOLDER_ID:
         logging.error("YANDEX_API_KEY или YANDEX_FOLDER_ID не найдены")
@@ -24,68 +24,81 @@ async def call_yandex_gpt(prompt: str, image_bytes: bytes = None) -> str:
         "Content-Type": "application/json"
     }
     
-    # Формируем сообщение
-    if image_bytes:
-        # Кодируем фото в base64
-        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
-        
-        # YandexGPT мультимодальная версия
-        data = {
-            "modelUri": f"gpt://{FOLDER_ID}/yandexgpt-lite",
-            "completionOptions": {
-                "stream": False,
-                "temperature": 0.4,
-                "maxTokens": 1000
-            },
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image",
-                            "image": image_base64
-                        }
-                    ]
-                }
-            ]
-        }
-    else:
-        # Только текст
-        data = {
-            "modelUri": f"gpt://{FOLDER_ID}/yandexgpt-lite",
-            "completionOptions": {
-                "stream": False,
-                "temperature": 0.4,
-                "maxTokens": 1000
-            },
-            "messages": [
-                {
-                    "role": "user",
-                    "text": prompt
-                }
-            ]
-        }
+    # Формируем тело запроса
+    data = {
+        "modelUri": f"gpt://{FOLDER_ID}/yandexgpt-lite",
+        "completionOptions": {
+            "stream": False,
+            "temperature": 0.4,
+            "maxTokens": 1000
+        },
+        "messages": [
+            {
+                "role": "user",
+                "text": prompt
+            }
+        ]
+    }
+    
+    # Логируем для отладки (без敏感ных данных)
+    logging.info(f"Отправка запроса к YandexGPT. Folder ID: {FOLDER_ID[:10]}...")
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(YANDEX_GPT_URL, headers=headers, json=data)
-            result = response.json()
+            
+            # Логируем статус ответа
+            logging.info(f"YandexGPT ответ: статус {response.status_code}")
+            
+            # Пытаемся получить тело ответа
+            try:
+                result = response.json()
+                logging.info(f"Тело ответа: {str(result)[:500]}")  # Логируем первые 500 символов
+            except:
+                logging.error(f"Не удалось распарсить JSON: {response.text[:500]}")
+                result = None
             
             if response.status_code == 200:
-                return result["result"]["alternatives"][0]["message"]["text"]
+                if result and "result" in result and "alternatives" in result["result"]:
+                    return result["result"]["alternatives"][0]["message"]["text"]
+                else:
+                    logging.error(f"Неожиданный формат ответа: {result}")
+                    return "❌ Ошибка: неожиданный формат ответа от YandexGPT"
             else:
-                error_msg = result.get("message", "Неизвестная ошибка")
+                # Разбираем конкретную ошибку
+                error_msg = "Неизвестная ошибка"
+                if result:
+                    if "message" in result:
+                        error_msg = result["message"]
+                    elif "error" in result:
+                        error_msg = result["error"].get("message", str(result["error"]))
+                    elif "description" in result:
+                        error_msg = result["description"]
+                
                 logging.error(f"YandexGPT ошибка {response.status_code}: {error_msg}")
-                return f"❌ Ошибка YandexGPT: {error_msg}"
+                
+                # Даём понятное объяснение пользователю
+                if response.status_code == 400:
+                    if "folder" in error_msg.lower():
+                        return "❌ Ошибка: неверный идентификатор каталога (Folder ID). Проверьте настройки бота."
+                    elif "api" in error_msg.lower() or "key" in error_msg.lower():
+                        return "❌ Ошибка: неверный API-ключ. Проверьте настройки бота."
+                    else:
+                        return f"❌ Ошибка запроса: {error_msg}"
+                elif response.status_code == 401:
+                    return "❌ Ошибка авторизации: недействительный API-ключ."
+                elif response.status_code == 403:
+                    return "❌ Ошибка доступа: у сервисного аккаунта нет прав на использование YandexGPT. Нужна роль 'ai.languageModels.user'."
+                elif response.status_code == 429:
+                    return "❌ Превышен лимит запросов. Попробуйте позже."
+                else:
+                    return f"❌ Ошибка YandexGPT (код {response.status_code}): {error_msg}"
                 
     except httpx.TimeoutException:
+        logging.error("Таймаут при вызове YandexGPT")
         return "❌ Превышено время ожидания ответа от YandexGPT. Попробуйте ещё раз."
     except Exception as e:
-        logging.error(f"Ошибка при вызове YandexGPT: {e}")
+        logging.error(f"Исключение при вызове YandexGPT: {e}", exc_info=True)
         return f"❌ Ошибка при анализе: {str(e)}"
 
 async def analyze_outfit(photo_bytes: bytes) -> str:
