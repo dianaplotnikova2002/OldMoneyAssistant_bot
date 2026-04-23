@@ -1,43 +1,39 @@
 import uuid
 import logging
 import os
-from datetime import datetime
 from dotenv import load_dotenv
 from yookassa import Configuration, Payment
 
-load_dotenv()
+# Загружаем .env ПРИНУДИТЕЛЬНО с указанием пути
+from pathlib import Path
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path, override=True)
 
-# ✅ Правильные имена переменных (как в .env)
-SHOP_ID = os.getenv("YUKASSA_SHOP_ID")      # ← YUKASSA, не YOOKASSA
-SECRET_KEY = os.getenv("YUKASSA_SECRET_KEY") # ← YUKASSA, не YOOKASSA
+# Правильные имена переменных (как в .env)
+SHOP_ID = os.getenv("YUKASSA_SHOP_ID")
+SECRET_KEY = os.getenv("YUKASSA_SECRET_KEY")
 
-# Диагностика загрузки ключей
-print(f"Загрузка ключей ЮKassa:")
-print(f"  SHOP_ID: {SHOP_ID}")
-print(f"  SECRET_KEY: {SECRET_KEY[:20] if SECRET_KEY else 'None'}...")
+# ДИАГНОСТИКА (удалите после проверки)
+print("=" * 50)
+print("ПРОВЕРКА КЛЮЧЕЙ ЮKASSA:")
+print(f"  SHOP_ID из .env: {SHOP_ID}")
+print(f"  SECRET_KEY из .env: {SECRET_KEY[:20] if SECRET_KEY else 'None'}...")
+print(f"  Тип SHOP_ID: {type(SHOP_ID)}")
+print(f"  Тип SECRET_KEY: {type(SECRET_KEY)}")
+print("=" * 50)
 
 # Настройка ЮKassa
 if SHOP_ID and SECRET_KEY:
-    Configuration.account_id = SHOP_ID
-    Configuration.secret_key = SECRET_KEY
+    Configuration.configure(account_id=SHOP_ID, secret_key=SECRET_KEY)
     logging.info("✅ ЮKassa настроена успешно")
 else:
     logging.error("❌ ЮKassa ключи не найдены в .env!")
-    logging.error("   Проверьте переменные: YUKASSA_SHOP_ID и YUKASSA_SECRET_KEY")
+    logging.error("   Проверьте, что в .env есть:")
+    logging.error("   YUKASSA_SHOP_ID=1325221")
+    logging.error("   YUKASSA_SECRET_KEY=live_...")
 
 def create_payment(amount: float, description: str, telegram_id: int, return_url: str = None) -> tuple:
-    """
-    Создаёт платёж в ЮKassa.
-    
-    Args:
-        amount: Сумма платежа (например, 599.00)
-        description: Описание платежа
-        telegram_id: ID пользователя в Telegram
-        return_url: URL для возврата после оплаты (опционально)
-    
-    Returns:
-        tuple: (payment_url, payment_id)
-    """
+    """Создаёт платёж в ЮKassa."""
     try:
         idempotence_key = str(uuid.uuid4())
         
@@ -64,7 +60,6 @@ def create_payment(amount: float, description: str, telegram_id: int, return_url
         payment_id = payment.id
         
         logging.info(f"✅ Создан платёж {payment_id} на сумму {amount} руб.")
-        logging.info(f"   Ссылка: {payment_url}")
         
         return payment_url, payment_id
         
@@ -73,25 +68,10 @@ def create_payment(amount: float, description: str, telegram_id: int, return_url
         raise
 
 def check_payment(payment_id: str) -> bool:
-    """
-    Проверяет статус платежа в ЮKassa.
-    
-    Args:
-        payment_id: ID платежа
-    
-    Returns:
-        bool: True если платёж успешен, иначе False
-    """
+    """Проверяет статус платежа."""
     try:
         payment = Payment.find_one(payment_id)
-        
-        status = payment.status
-        paid = payment.paid
-        
-        logging.info(f"📊 Проверка платежа {payment_id}: статус={status}, paid={paid}")
-        
-        return status == "succeeded" and paid == True
-        
+        return payment.status == "succeeded" and payment.paid == True
     except Exception as e:
-        logging.error(f"❌ Ошибка при проверке платежа {payment_id}: {e}")
+        logging.error(f"❌ Ошибка при проверке платежа: {e}")
         return False

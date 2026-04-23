@@ -29,7 +29,7 @@ def init_db():
         )
     """)
     
-    # Консультации (счётчик бесплатных)
+    # Консультации
     c.execute("""
         CREATE TABLE IF NOT EXISTS consultations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +38,20 @@ def init_db():
             analysis_result TEXT,
             is_free BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    # Платежи (НОВАЯ ТАБЛИЦА)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER,
+            payment_id TEXT UNIQUE,
+            amount REAL,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            paid_at TIMESTAMP,
+            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
         )
     """)
     
@@ -64,7 +78,7 @@ def has_free_consultation(telegram_id) -> bool:
     """, (telegram_id,))
     count = c.fetchone()[0]
     conn.close()
-    return count == 0  # True — можно дать бесплатно, False — уже использовал
+    return count == 0
 
 def save_consultation(telegram_id, photo_file_id, analysis_result, is_free=True):
     conn = sqlite3.connect("bot_database.db")
@@ -94,7 +108,7 @@ def has_active_subscription(telegram_id) -> bool:
     if end_date:
         end_date = datetime.fromisoformat(end_date)
         if end_date < datetime.now():
-            return False  # подписка истекла
+            return False
     
     return bool(is_active)
 
@@ -134,8 +148,10 @@ def get_subscription_info(telegram_id):
         "start_date": start_date,
         "end_date": end_date
     }
-    def save_payment(telegram_id, payment_id, amount, status="pending"): 
-     conn = sqlite3.connect("bot_database.db")
+
+def save_payment(telegram_id, payment_id, amount, status="pending"):
+    """Сохраняет информацию о платеже."""
+    conn = sqlite3.connect("bot_database.db")
     c = conn.cursor()
     c.execute("""
         INSERT INTO payments (telegram_id, payment_id, amount, status)
@@ -145,6 +161,7 @@ def get_subscription_info(telegram_id):
     conn.close()
 
 def update_payment_status(payment_id, status, paid_at=None):
+    """Обновляет статус платежа."""
     conn = sqlite3.connect("bot_database.db")
     c = conn.cursor()
     if paid_at:
