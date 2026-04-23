@@ -8,7 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from yandex_analyzer import analyze_outfit, analyze_item_for_purchase, analyze_label
 import database
 import payment
-import analyzer  # ваш модуль с AI-анализом
+import analyzer
 
 
 load_dotenv()
@@ -17,50 +17,6 @@ TOKEN = os.getenv("BOT_TOKEN")
 logging.basicConfig(level=logging.INFO)
 
 database.init_db()
-
-
-async def handle_label(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик для команды /label — анализ этикетки"""
-    user_id = update.effective_user.id
-    
-    # Проверяем подписку
-    has_subscription = database.has_active_subscription(user_id)
-    has_free_left = database.has_free_consultation(user_id)
-    
-    if not has_subscription and not has_free_left:
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
-        ])
-        await update.message.reply_text(
-            "🔍 Функция «Анализ этикетки» доступна только по подписке.\n\n"
-            "Оформите подписку за 599₽ и получайте:\n"
-            "✅ Анализ состава тканей\n"
-            "✅ Оценку качества материалов\n"
-            "✅ Вердикт: стоит ли покупать",
-            reply_markup=keyboard
-        )
-        return
-    
-    # Получаем фото
-    if not update.message.reply_to_message or not update.message.reply_to_message.photo:
-        await update.message.reply_text(
-            "📸 Как пользоваться:\n"
-            "1. Отправьте фото этикетки в чат\n"
-            "2. Нажмите на фото → 'Ответить'\n"
-            "3. Напишите /label\n\n"
-            "Или просто отправьте фото с подписью /label"
-        )
-        return
-    
-    # Берём фото из ответа
-    photo_file = await update.message.reply_to_message.photo[-1].get_file()
-    photo_bytes = await photo_file.download_as_bytearray()
-    
-    await update.message.reply_text("🏷️ Анализирую этикетку... Это займёт несколько секунд.")
-    
-    # Анализируем
-    analysis = await analyze_label(photo_bytes)
-    await update.message.reply_text(analysis, parse_mode='Markdown')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -125,25 +81,26 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Отправьте новое фото, чтобы увидеть предложение."
             )
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Основной обработчик фото"""
-    user_id = update.effective_user.id
+     logging.info(f"Получено фото, user_data: {context.user_data}")
+"""Основной обработчик фото"""
+user_id = update.effective_user.id
     
     # Проверяем, в каком режиме пользователь
-    if context.user_data.get("waiting_for_check_photo"):
+if context.user_data.get("waiting_for_check_photo"):
         # Пользователь хочет проверить вещь (бери/не бери)
         await handle_check_photo(update, context)
         return
     
-    if context.user_data.get("waiting_for_label_photo"):
+if context.user_data.get("waiting_for_label_photo"):
         # Пользователь хочет проверить этикетку
         await handle_label_photo(update, context)
         return
     
     # Если нет активного режима — проверяем подписку для обычного анализа
-    has_subscription = database.has_active_subscription(user_id)
-    has_free_left = database.has_free_consultation(user_id)
+has_subscription = database.has_active_subscription(user_id)
+has_free_left = database.has_free_consultation(user_id)
     
-    if not has_subscription and not has_free_left:
+if not has_subscription and not has_free_left:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📆 Оформить подписку 599₽/мес", callback_data="subscribe")]
         ])
@@ -155,13 +112,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Получаем фото
-    photo_file = await update.message.photo[-1].get_file()
-    photo_bytes = await photo_file.download_as_bytearray()
+photo_file = await update.message.photo[-1].get_file()
+photo_bytes = await photo_file.download_as_bytearray()
     
     # Анализируем образ
-    await update.message.reply_text("🔍 Анализирую ваш образ...")
+await update.message.reply_text("🔍 Анализирую ваш образ...")
     
-    if has_free_left and not has_subscription:
+if has_free_left and not has_subscription:
         # Это бесплатная консультация
         analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=True)
@@ -176,7 +133,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Оформите подписку за 599₽ и получайте неограниченные консультации.",
             reply_markup=keyboard
         )
-    else:
+else:
         # Обычная платная консультация
         analysis = await analyze_outfit(photo_bytes)
         database.save_consultation(user_id, update.message.photo[-1].file_id, analysis, is_free=False)
