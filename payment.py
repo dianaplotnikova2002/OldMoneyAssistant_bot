@@ -4,20 +4,26 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 from yookassa import Configuration, Payment
-from telegram.ext import InvalidCallbackData
+
 load_dotenv()
 
-# Настройка ЮKassa
-SHOP_ID = os.getenv("YOOKASSA_SHOP_ID")
-SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY")
+# ✅ Правильные имена переменных (как в .env)
+SHOP_ID = os.getenv("YUKASSA_SHOP_ID")      # ← YUKASSA, не YOOKASSA
+SECRET_KEY = os.getenv("YUKASSA_SECRET_KEY") # ← YUKASSA, не YOOKASSA
 
+# Диагностика загрузки ключей
+print(f"Загрузка ключей ЮKassa:")
+print(f"  SHOP_ID: {SHOP_ID}")
+print(f"  SECRET_KEY: {SECRET_KEY[:20] if SECRET_KEY else 'None'}...")
+
+# Настройка ЮKassa
 if SHOP_ID and SECRET_KEY:
     Configuration.account_id = SHOP_ID
     Configuration.secret_key = SECRET_KEY
-    logging.info("ЮKassa настроена успешно")
+    logging.info("✅ ЮKassa настроена успешно")
 else:
-    logging.warning("ЮKassa ключи не настроены. Платежи не будут работать.")
-
+    logging.error("❌ ЮKassa ключи не найдены в .env!")
+    logging.error("   Проверьте переменные: YUKASSA_SHOP_ID и YUKASSA_SECRET_KEY")
 
 def create_payment(amount: float, description: str, telegram_id: int, return_url: str = None) -> tuple:
     """
@@ -57,12 +63,13 @@ def create_payment(amount: float, description: str, telegram_id: int, return_url
         payment_url = payment.confirmation.confirmation_url
         payment_id = payment.id
         
-        logging.info(f"Создан платёж {payment_id} на сумму {amount} руб.")
+        logging.info(f"✅ Создан платёж {payment_id} на сумму {amount} руб.")
+        logging.info(f"   Ссылка: {payment_url}")
         
         return payment_url, payment_id
         
     except Exception as e:
-        logging.error(f"Ошибка при создании платежа: {e}")
+        logging.error(f"❌ Ошибка при создании платежа: {e}")
         raise
 
 def check_payment(payment_id: str) -> bool:
@@ -81,10 +88,10 @@ def check_payment(payment_id: str) -> bool:
         status = payment.status
         paid = payment.paid
         
-        logging.info(f"Платёж {payment_id}: статус={status}, paid={paid}")
+        logging.info(f"📊 Проверка платежа {payment_id}: статус={status}, paid={paid}")
         
         return status == "succeeded" and paid == True
         
     except Exception as e:
-        logging.error(f"Ошибка при проверке платежа {payment_id}: {e}")
+        logging.error(f"❌ Ошибка при проверке платежа {payment_id}: {e}")
         return False
